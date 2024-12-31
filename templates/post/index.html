@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Blog Posts</h1>
+<form id="postForm" action="{% url 'submit_post' %}" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Submit</button>
+</form>
+<div id="message"></div>
+<div id="loading" style="display:none;">Loading...</div>
+<ul id="posts">
+    <!-- Initially load posts if needed -->
+    {% for p in posts %}
+    <li>
+        <a href="{% url 'detail' p_id=p.id %}">{{ p.post_heading }}</a>  ~~~  
+        <button class="btndel" style="color: red;" data-id="{{ p.id }}">Delete</button>
+    </li>
+    {% endfor %}
+</ul>
+
+<!-- Include jQuery if not already included in base.html -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Function to fetch and display posts
+        function fetchPosts() {
+            $("#loading").show();
+            $.ajax({
+                url: "{% url 'get_posts' %}",
+                type: 'GET',
+                dataType: 'json',
+                success: function (response) {
+                    console.log(response)
+                    $("#posts").empty();
+                    if (response.posts && response.posts.length > 0) {
+                        response.posts.forEach(function (post) {
+                            var urlid = `/detail/${post.id}`
+                            var urldel = post.id
+                            var listItem = `<li><a href="${urlid}">${post.post_heading}</a>  ~~~  
+        <button class="btndel" style="color: red;" data-id="${urldel}">Delete</button></li>`;
+                            $("#posts").append(listItem);
+                        });
+                    } else {
+                        $("#posts").append("<li>No posts available.</li>");
+                    }
+                    $("#loading").hide();
+                },
+                error: function () {
+                    alert("Error retrieving posts");
+                    $("#loading").hide();
+                }
+            });
+        }
+
+        // Initial fetch of posts
+        //fetchPosts();
+
+        // Optional: Polling to update posts every 5 seconds (5000 milliseconds)
+        //setInterval(fetchPosts, 5000);
+        $(document).on('click', '.btndel', function (event) {
+            event.preventDefault(); // Prevent default button behavior
+
+            const postId = $(this).data('id'); // Get the post ID from data attribute
+            const button = $(this); // Reference to the clicked button
+
+            if (confirm('Are you sure you want to delete this post?')) {
+                $.ajax({
+                    url: `/delete/${postId}`, // Construct the URL
+                    type: 'GET', // Use POST method
+                    
+                    data: {
+                        'id': postId // Send the post ID in data (optional)
+                    },
+                    success: function (response) {
+                        fetchPosts();
+                    },
+                    /*error: function (xhr, status, errmsg) {
+                        $("#message").text("An error occurred: " + errmsg).css("color", "red");
+                    }*/
+                });
+            }
+        });
+
+        // Handle form submission via AJAX
+        $("#postForm").on('submit', function (event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Serialize the form data
+            var formData = $(this).serialize();
+
+            $.ajax({
+                url: $(this).attr('action'), // URL from the form's action attribute
+                type: 'POST',
+                data: formData,
+                dataType: 'json',
+                success: function (response) {
+                    if (response.success) {
+                        // Reset the form fields
+                        $("#postForm")[0].reset();
+                        // Display a success message
+                        $("#message").text("Post submitted successfully!").css("color", "green");
+                        // Fetch the updated list of posts
+                        fetchPosts();
+                    } else {
+                        // Handle form errors
+                        var errorMessages = "";
+                        for (var field in response.errors) {
+                            errorMessages += `${field}: ${response.errors[field].join(", ")}\n`;
+                        }
+                        $("#message").text("Error submitting the form:\n" + errorMessages).css("color", "red");
+                    }
+                },
+                error: function (xhr, status, error) {
+                    // Enhanced error handling
+                    var errorMsg = "An error occurred while submitting the form.";
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        var detailedErrors = "";
+                        for (var field in xhr.responseJSON.errors) {
+                            detailedErrors += `${field}: ${xhr.responseJSON.errors[field].join(", ")}\n`;
+                        }
+                        errorMsg += "\n" + detailedErrors;
+                    }
+                    $("#message").text(errorMsg).css("color", "red");
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
